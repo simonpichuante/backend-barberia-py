@@ -1,47 +1,39 @@
-from db import get_conn, refcursor_to_list
-import oracledb
+from services.base_service import BaseService
+from exceptions.custom_exceptions import NotFoundError
 
-def list_clientes():
-    with get_conn() as conn:
-        cur = conn.cursor()
-        outcur = cur.var(oracledb.DB_TYPE_CURSOR)
-        cur.callproc("pa_cliente_list", [outcur])
-        rc = outcur.getvalue()
-        result = refcursor_to_list(rc)
-        rc.close()
-        cur.close()
-        return result
+class ClienteService(BaseService):
+    def create(self, payload):
+        # llamamos al procedimiento pa_cliente_insert SI existe en la BD
+        # si no existe, fallback a insert directo
+        try:
+            # ejemplo de llamada a procedimiento: pa_cliente_insert(:p_rut, :p_nombre, :p_apellido, :p_correo, :p_celular)
+            plsql = "BEGIN pa_cliente_insert(:p_rut, :p_nombre, :p_apellido, :p_correo, :p_celular); END;"
+            params = {
+                "p_rut": payload.get("RUT"),
+                "p_nombre": payload.get("NOMBRE"),
+                "p_apellido": payload.get("APELLIDO"),
+                "p_correo": payload.get("CORREO"),
+                "p_celular": payload.get("CELULAR")
+            }
+            return self.db.execute_object(plsql, params)
+        except Exception:
+            sql = "INSERT INTO CLIENTE (RUT, NOMBRE, APELLIDO, CORREO, CELULAR) VALUES (:RUT,:NOMBRE,:APELLIDO,:CORREO,:CELULAR)"
+            return self.db.execute_object(sql, payload)
 
-def get_cliente(p_id: int):
-    with get_conn() as conn:
-        cur = conn.cursor()
-        outcur = cur.var(oracledb.DB_TYPE_CURSOR)
-        cur.callproc("pa_cliente_get", [p_id, outcur])
-        rc = outcur.getvalue()
-        rows = refcursor_to_list(rc)
-        rc.close()
-        cur.close()
-        return rows[0] if rows else None
+    def update(self, id_, payload):
+        sql = "UPDATE CLIENTE SET RUT=:RUT, NOMBRE=:NOMBRE, APELLIDO=:APELLIDO, CORREO=:CORREO, CELULAR=:CELULAR WHERE ID_CLIENTE=:id"
+        p = payload.copy()
+        p["id"] = id_
+        return self.db.execute_object(sql, p)
 
-def insert_cliente(p_rut, p_nombre, p_apellido=None, p_correo=None, p_celular=None):
-    with get_conn() as conn:
-        cur = conn.cursor()
-        # pa_cliente_insert(p_rut, p_nombre, p_apellido, p_correo, p_celular)
-        cur.callproc("pa_cliente_insert", [p_rut, p_nombre, p_apellido, p_correo, p_celular])
-        # procedure commits internally per DDL you shared
-        cur.close()
-        return True
+    def delete(self, id_):
+        return self.db.execute_object("DELETE FROM CLIENTE WHERE ID_CLIENTE=:id", {"id": id_})
 
-def update_cliente(p_id, p_rut, p_nombre, p_apellido=None, p_correo=None, p_celular=None):
-    with get_conn() as conn:
-        cur = conn.cursor()
-        cur.callproc("pa_cliente_update", [p_id, p_rut, p_nombre, p_apellido, p_correo, p_celular])
-        cur.close()
-        return True
+    def get(self, id_):
+        rows = self.db.execute_object("SELECT * FROM CLIENTE WHERE ID_CLIENTE=:id", {"id": id_})
+        if not rows:
+            raise NotFoundError("Cliente no encontrado")
+        return rows[0]
 
-def delete_cliente(p_id):
-    with get_conn() as conn:
-        cur = conn.cursor()
-        cur.callproc("pa_cliente_delete", [p_id])
-        cur.close()
-        return True
+    def list(self, **filters):
+        return self.db.execute_object("SELECT * FROM CLIENTE ORDER BY NOMBRE")
