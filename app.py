@@ -6,6 +6,7 @@ import logging
 import os
 from dotenv import load_dotenv
 
+
 load_dotenv()
 
 # importa init_pool desde tu db.py (asegúrate de que db.py esté en la misma carpeta)
